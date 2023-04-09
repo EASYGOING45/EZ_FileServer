@@ -140,4 +140,33 @@ public:
     FILEMSGBODYSTATUS fileMsgStatus; // 记录表示文件的消息体已经
 };
 
+// 继承Message,对于状态行修改和获取，设置要发送的首部选项
+class Response : public Message
+{
+public:
+    Response() : Message()
+    {
+    }
+
+public:
+    // 保存状态行相关数据
+    std::string responseHttpVersion = "HTTP/1.1";
+    std::string responseStatusCode;
+    std::string responseStatusDes;
+
+    // 以下成员主要用于在发送响应消息时暂存相关的数据
+    MSGBODYTYPE bodyType;     // 消息的类型
+    std::string bodyFileName; // 要发送数据的路径
+
+    std::string beforeBodyMsg; // 消息体之前的所有数据
+    int beforeBodyMsgLen;      // 消息体之前的所有数据的长度
+
+    std::string msgBody;      // 在字符串中保存HTML类型的消息体
+    unsigned long msgBodyLen; // 消息体的长度
+
+    int fileMsgFd; // 文件类型的消息体的文件描述符
+
+    unsigned long curStatusHasSendLen; // 当前状态已经发送的数据长度
+};
+
 #endif
