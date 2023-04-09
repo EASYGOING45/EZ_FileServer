@@ -42,4 +42,20 @@ enum FILEMSGBODYSTATUS
     FILE_COMPLATE    // 文件已经处理完成
 };
 
+// 定义Request和Response公共的部分，即消息首部、消息体（可以获取消息首部的某个字段、修改与获取消息体相关的数据）
+class Message
+{
+public:
+    Message() : status(HANDLE_INIT)
+    {
+    }
+
+public:
+    // 请求消息和响应消息需要的成员体
+    MSGSTATUS status; // 记录消息的接收状态，表示整个请求报文收到了多少以及发送了多少
+
+    std::unordered_map<std::string, std::string> msgHeader; // 保存消息首部
+private:
+};
+
 #endif
