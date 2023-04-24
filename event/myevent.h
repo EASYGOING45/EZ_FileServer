@@ -93,4 +93,33 @@ private:
     int m_clientFd; // 客户端套接字，从该客户端读取数据
     int m_epollFd;  // epoll句柄，用于将新的连接加入epoll中
 };
+
+// 处理并向客户端发送数据
+class HandleSend : public EventBase
+{
+public:
+    HandleSend(int clientFd, int epollFd) : m_clientFd(clientFd), m_epollFd(epollFd){};
+    virtual ~HandleSend(){};
+
+public:
+    virtual void process() override;
+
+    // 用于构建状态行，参数分别表示状态行的三个部分
+    std::string getStatusLine(const std::string &httpVersion, const std::string &statusCode, const std::string &statusDes);
+
+    // 下属两个函数用于构建文件列表的页面，最终结果保存导fileListHtml中
+    void getFileListPage(std::string &fileListHtml);
+    void getFileVec(const std::string dirName, std::vector<std::string> &resVec);
+
+    // 构建头部字段:
+    // contentLength 指定消息体的长度
+    // contentType   指定消息体的类型
+    // redirectLoction=""    如果是重定向报文，可以指定重定向的地址。空字符串表示不添加该首部
+    // contentRange=""   如果是下载文件的响应报文，指定当前发送的文件范围。空字符串表示不添加该首部
+    std::string getMessageHeader(const std::string contentLength, const std::string contentType, const std::string redirectLoction = "", const std::string contentRange = "");
+
+private:
+    int m_clientFd; // 客户端套接字 向该客户端写数据
+    int m_epollFd;  // epoll句柄 用于将新的连接加入epoll中
+};
 #endif
