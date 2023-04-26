@@ -119,5 +119,24 @@ void HandleRecv::process()
                 requestStatus[m_clientFd].addHeaderOpt(curLine); // 如果不是空行，需要将该首部保存到map中
             }
         }
+
+        // 如果是处理消息体的状态，根据请求类型执行特定的操作
+        if (requestStatus[m_clientFd].status == HANDLE_BODY)
+        {
+            // GET 操作时表示请求数据，将请求的资源路径交给 HandleSend事件处理
+            if (requestStatus[m_clientFd].requestMethod == "GET")
+            {
+                // 设置响应消息的资源路径，在HandleSend中根据请求资源构建整个响应消息并发送
+                responseStatus[m_clientFd].bodyFileName = requestStatus[m_clientFd].requestResource;
+
+                // 设置监听套接字的可写事件，当套接字写缓冲区有空闲数据时，会产生 HandleSend 事件，将 m_clientFd 索引的 responseStatus 中的数据发送
+                modifyWaitFd(m_epollFd, m_clientFd, true, true, true);
+                requestStatus[m_clientFd].status = HANDLE_COMPLATE;
+                std::cout << outHead("info") << "客户端 " << m_clientFd << " 发送 GET 请求，已将请求资源构成 Response 写事件等待发送数据" << std::endl;
+                break;
+            }
+
+            // TAG
+        }
     }
 }
