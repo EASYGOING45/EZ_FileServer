@@ -100,6 +100,23 @@ void HandleRecv::process()
 
                 curLine = requestStatus[m_clientFd].recvMsg.substr(0, endIndex + 2); // 将该行的内容取出
                 requestStatus[m_clientFd].recvMsg.erase(0, endIndex + 2);            // 删除收到的数据中的该行数据
+
+                if (curLine == "\r\n")
+                {
+                    requestStatus[m_clientFd].status = HANDLE_BODY; // 如果是空行，将状态修改为等待解析消息体
+                    if (requestStatus[m_clientFd].msgHeader["Content-Type"] == "multipart/form-data")
+                    {
+                        // 如果接收的是文件，设置消息体中文件的处理状态
+                        requestStatus[m_clientFd].fileMsgStatus = FILE_BEGIN_FLAG;
+                    }
+                    std::cout << outHead("info") << "处理客户端" << m_clientFd << "的消息首部完成" << std::endl;
+                    if (requestStatus[m_clientFd].requestMethod == "POST")
+                    {
+                        std::cout << outHead("info") << "客户端" << m_clientFd << "发送POST请求，开始处理请求体" << std::endl;
+                    }
+                    break;
+                }
+                requestStatus[m_clientFd].addHeaderOpt(curLine); // 如果不是空行，需要将该首部保存到map中
             }
         }
     }
