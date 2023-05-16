@@ -137,6 +137,50 @@ void HandleRecv::process()
             }
 
             // TAG
+            // 处理客户端发送的POST请求体中的文件信息
+            //  POST方法表示上传数据，执行接收数据相关的操作
+            if (requestStatus[m_clientFd].requestMethod == "POST")
+            {
+                // 记录未处理的数据长度，用于当前if步骤处理结束时，计算处理了多少消息体数据
+                // 处理非文件时用来判断数据边界（文件使用boundary确定边界）
+                std::string::size_type beginSize = requestStatus[m_clientFd].recvMsg.size();
+                if (requestStatus[m_clientFd].msgHeader["Content-Type"] == "multipart/form-data")
+                { // 如果发送的是文件
+                    // 如果处于等待处理文件凯斯标志的状态，查找\r\n判断标志部分是否已经接收
+                    if (requestStatus[m_clientFd].fileMsgStatus == FILE_BEGIN_FLAG)
+                    {
+                        std::cout << outHead("info") << "客户端" << m_clientFd << " 的POST请求用于上传文件，正在寻找文件头开始边界..." << std::endl;
+                        // 查找\r\n边界
+                        endIndex = requestStatus[m_clientFd].recvMsg.find("\r\n");
+
+                        // 当前状态下 \r\n前的数据必然是文件信息开始的标志
+                        if (endIndex != std::string::npos)
+                        {
+                            // string::npos是string::size_type的一个静态成员常量，值为-1，表示未找到子串
+                            // 找到了边界，将边界前的数据保存到文件信息开始标志中
+                            std::string flagStr = requestStatus[m_clientFd].recvMsg.substr(0, endIndex);
+
+                            if (flagStr == "--" + requestStatus[m_clientFd].msgHeader["boundary"])
+                            {                                                             // 如果等于"--" + boundary，表示找到了文件信息开始的标志 则进入下一个状态
+                                requestStatus[m_clientFd].fileMsgStatus = FILE_HEAD;      // 进入下一个状态
+                                requestStatus[m_clientFd].recvMsg.erase(0, endIndex + 2); // 将开始标志行删除（包括\r\n）
+                                std::cout << outHead("info") << "客户端" << m_clientFd << "的POST请求体中找到文件头开始边界，正在处理文件头..." << std::endl;
+                            }
+                            else
+                            {
+                                // 如果和边界不同，表示出错，直接返回重定向报文，重新请求文件列表
+                                responseStatus[m_clientFd].bodyFileName = '/redirect';
+                                modifyWaitFd(m_epollFd, m_clientFd, true, true, true); // 重置可读事件和可写事件，用于发送重定向回复报文
+                                requestStatus[m_clientFd].status = HANDLE_COMPLATE;    // 设置状态为处理完成
+                                std::cout << outHead("error") << "客户端 " << m_clientFd << " 的 POST 请求体中没有找到文件头开始边界，添加重定向 Response 写事件，使客户端重定向到文件列表" << std::endl;
+                                break;
+                            }
+                        }
+                    }
+
+                    // FLAG
+                }
+            }
         }
     }
 }
