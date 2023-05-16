@@ -219,8 +219,124 @@ void HandleRecv::process()
                             }
                         }
                     }
+
+                    // FLAG-2023-0516
+                    // 如果处于等待并处理消息体中文件内容部分
+                    // 循环检索是否有 \r\n,将 \r\n之前的内容全部保存
+                    // 如果存在\r\n，根据后面的内容判断是否到达文件边界
+                    if (requestStatus[m_clientFd].fileMsgStatus == FILE_CONTENT)
+                    {
+                        // 首先以二进制追加的方式打开文件
+                        std::ofstream ofs("filedir/" + requestStatus[m_clientFd].recvFileName, std::ios::out | std::ios::app | std::ios::binary);
+                        if (!ofs)
+                        {
+                            std::cout << outHead("error") << "客户端" << m_clientFd << " 的POST 请求体所需要保存的文件打开失败，正在重新打开文件..." << std::endl;
+                            break;
+                        }
+                        while (1)
+                        {
+                            int saveLen = requestStatus[m_clientFd].recvMsg.size(); // 用于存储 根据\r的位置决定向文件中写入多少字符，初始为所有字符长度
+                            if (saveLen == 0)
+                            {
+                                // 长度为空时退出循环，等待接收到数据时再处理
+                                break;
+                            }
+                            // 在剩余的字符中搜索标志 \r
+                            endIndex = requestStatus[m_clientFd].recvMsg.find('\r');
+
+                            if (endIndex != std::string::npos)
+                            {
+                                // 如果有 \r,后面有可能是文件结束标识
+                                // 首先判断\r后的数据是否满足结束标识的长度，是否大于等于sizeof(\r\n+"--"+boundary+"--"+\r\n)
+                                int boundarySecLen = requestStatus[m_clientFd].msgHeader["boundary"].size() + 8;
+                                if (requestStatus[m_clientFd].recvMsg.size() - endIndex >= boundarySecLen)
+                                {
+                                    // 判断后面这部分数据是否为结束边界 \r\n
+                                    if (requestStatus[m_clientFd].recvMsg.substr(endIndex, boundarySecLen) ==
+                                        "\r\n--" + requestStatus[m_clientFd].msgHeader["boundary"] + "--\r\n")
+                                    {
+                                        if (endIndex == 0)
+                                        {
+                                            // 表示边界前的数据都已经写入文件，设置文件接收完成，进入下一个状态
+                                            std::cout << outHead("info") << "客户端" << m_clientFd << " 的POST请求体中的文件数据接受并保存完毕" << std::endl;
+                                            requestStatus[m_clientFd].fileMsgStatus = FILE_COMPLATE; // 设置文件接收完成
+                                            break;
+                                        }
+
+                                        // 如果后面不是结束标识，先将\r 之前的所有数据写入文件，在循环的下一轮会进到上一个if，结束整个处理过程
+                                        saveLen = endIndex
+                                    }
+                                    else
+                                    {
+                                        // 如果不是边界，在\r后再次搜索\r，如果搜索到了，写入的数据截至到第二个\r，否则将所有数据写入
+                                        endIndex = requestStatus[m_clientFd].recvMsg.find('\r', endIndex + 1);
+                                        if (endIndex != std::string::npos)
+                                        {
+                                            saveLen = endIndex;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    // 如果后面的数据长度还不够，则将/r之前的数据写入文件，并等待接收后面的数据
+
+                                    // 如果/r之前的数据已经写入文件，退出循环，等待接收更多数据后再进入该循环
+                                    if (endIndex == 0)
+                                    {
+                                        break;
+                                    }
+
+                                    // 否则将endIndex前的数据写入文件
+                                    saveLen = endIndex;
+                                }
+                            }
+                            // 如果没有退出表示当前仍是数据部分，将saveLen字节的数据存入文件，并将这些数据从recvMsg数据中删除
+                            ofs.write(requestStatus[m_clientFd].recvMsg.c_str(), saveLen);
+                            requestStatus[m_clientFd].recvMsg.erase(0, saveLen);
+                        }
+                        ofs.close();
+                    }
+                    // std::cout<<"已经退出文件接收函数"<<std::endl;
+                    // 如果文件已经处理完成，设置消息体为完成状态
+                    if (requestStatus[m_clientFd].fileMsgStatus == FILE_COMPLATE)
+                    {
+                        // 设置响应消息的资源路径，再HandleSend中根据请求资源构建整个响应消息并发送
+                        responseStatus[m_clientFd].bodyFileName = "/redirect";
+                        modifyWaitFd(m_epollFd, m_clientFd, true, true, true); // 重置可读事件和可写事件，用于发送重定向回复报文
+                        requestStatus[m_clientFd].status = HANDLE_COMPLATE;
+                        std::cout << outHead("info") << "客户端" << m_clientFd << " 的POST请求体处理完成，添加Response写事件，发送重定向报文刷新文件列表" << std::endl;
+                        break;
+                    }
+                }
+                else
+                {
+                    // POST是其他类型的数据
+                    // 其他POST类型的数据时，直接返回重定向报文，获取文件列表
+                    responseStatus[m_clientFd].bodyFileName = "/redirect";
+                    modifyWaitFd(m_epollFd, m_clientFd, true, true, true);
+                    requestStatus[m_clientFd].status = HANDLE_COMPLATE;
+                    std::cout << outHead("error") << "客户端" << m_clientFd << " 的POST请求中接收到不能处理的数据，添加Response写事件，返回重定向到文件列表的报文" << std::endl;
+                    break;
                 }
             }
         }
+    }
+
+    if (requestStatus[m_clientFd].status == HANDLE_COMPLATE)
+    {
+        // 如果请求处理完成，将该套接字对应的请求删除
+        std::cout << outHead("info") << "客户端" << m_clientFd << " 的请求消息处理成功" << std::endl;
+        requestStatus.erase(m_clientFd);
+    }
+    else if (requestStatus[m_clientFd].status == HANDLE_ERROR)
+    {
+        // 请求处理错误，关闭该文件描述符，将该套接字对应的请求删除，从监听列表中删除该文件描述符
+        std::cout << outHead("error") << "客户端" << m_clientFd << " 的请求消息处理失败，关闭连接" << std::endl;
+        // 先删除监听的文件描述符
+        deleteWaitFd(m_epollFd, m_clientFd);
+        // 再关闭文件描述符
+        shutdown(m_clientFd, SHUT_RDWR);
+        close(m_clientFd);
+        requestStatus.erase(m_clientFd);
     }
 }
