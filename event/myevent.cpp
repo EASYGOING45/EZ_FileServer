@@ -179,6 +179,46 @@ void HandleRecv::process()
                     }
 
                     // FLAG
+                    // 如果处于等待接收并处理消息体中文件头部信息的状态，从中提取文件名
+                    if (requestStatus[m_clientFd].fileMsgStatus == FILE_HEAD)
+                    {
+                        std::string strLine;
+                        while (1)
+                        {
+                            // 查找 \r\n表示一行数据
+                            endIndex = requestStatus[m_clientFd].recvMsg.find("\r\n");
+                            if (endIndex != std::string::npos)
+                            {
+                                strLine = requestStatus[m_clientFd].recvMsg.substr(0, endIndex + 2); // 获取这一行的数据信息
+                                requestStatus[m_clientFd].recvMsg.erase(0, endIndex + 2);            // 删除这一行的数据
+
+                                // 检测是否为空行，如果是空行，修改状态，退出
+                                if (strLine == "\r\n")
+                                {
+                                    requestStatus[m_clientFd].fileMsgStatus = FILE_CONTENT;
+                                    std::cout << outHead("info") << "客户端" << m_clientFd << " 的POST请求体中文件头处理成功，正在接收并保存文件内容..." << std::endl;
+                                    break;
+                                }
+                                // 查找strLine中是否包含filename
+                                endIndex = strLine.find("filename");
+                                if (endIndex != std::string::npos)
+                                {
+                                    strLine.erase(0, endIndex + std::string("filename=\"").size()); // 将真正fiename前的所有字符删除
+                                    for (int i = 0; strLine[i] != '\"'; ++i)
+                                    {
+                                        // 保存文件名
+                                        requestStatus[m_clientFd].recvFileName += strLine[i];
+                                    }
+                                    std::cout << outHead("info") << "客户端" << m_clientFd << " 的POST请求体中找到文件名字" << requestStatus[m_clientFd].recvFileName << " , 继续处理文件头..." << std::endl;
+                                }
+                            }
+                            else
+                            {
+                                // 如果没有找到，表示消息还没有完整接收，退出，等待下一轮的事件中继续处理
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
