@@ -482,6 +482,62 @@ void HandleSend::process()
         }
         else
         {
+            // 对于其他的请求，将页面全部重定向到文件列表页面
+            // 添加状态行
+            responseStatus[m_clientFd].beforeBodyMsg = getStatusLine("HTTP/1.1", "302", "Moved Temporarily");
+
+            // 构建重定向的消息首部
+            responseStatus[m_clientFd].beforeBodyMsg += getMessageHeader("0", "html", "/", "");
+
+            // 加入空行
+            responseStatus[m_clientFd].beforeBodyMsg += "\r\n";
+            responseStatus[m_clientFd].beforeBodyMsgLen = responseStatus[m_clientFd].beforeBodyMsg.size();
+
+            // 设置标识，转换到发送数据的状态
+            responseStatus[m_clientFd].bodyType = EMPTY_TYPE;   // 设置消息体的类型
+            responseStatus[m_clientFd].status = HANDLE_HEAD;    // 设置状态为处理消息头
+            responseStatus[m_clientFd].curStatusHasSendLen = 0; // 设置当前已发送的数据长度为0
+            std::cout << outHead("info") << "客户端" << m_clientFd << " 的响应报文是重定向报文，状态行和消息首部已构建完成" << std::endl;
+        }
+    }
+
+    while (1)
+    {
+        long long sentLen = 0;
+        // 发送响应消息头
+        if (responseStatus[m_clientFd].status == HANDLE_HEAD)
+        {
+            // 开始发送消息体之前的所有数据
+            sentLen = responseStatus[m_clientFd].curStatusHasSendLen;
+            sentLen = send(m_clientFd, responseStatus[m_clientFd].beforeBodyMsg.c_str() + sentLen, responseStatus[m_clientFd].beforeBodyMsgLen - sentLen, 0);
+
+            if (sentLen == -1)
+            {
+                if (errno != EAGAIN)
+                {
+                    // 如果不是缓冲区满，设置发送失败状态，并退出循环
+                    requestStatus[m_clientFd].status = HANDLE_ERROR;
+                    std::cout << outHead("error") << "发送响应体和消息首部时返回 -1(errno = " << errno << ")" << std::endl;
+                    break;
                 }
+                // 如果缓冲区已满，退出循环，下面会重置EPOLLOUT事件，等待下次进入函数继续发送
+                break;
+            }
+            responseStatus[m_clientFd].curStatusHasSendLen += sentLen;
+            // 如果数据已经发送完成，将状态设置为发送消息体
+            if (responseStatus[m_clientFd].curStatusHasSendLen >= responseStatus[m_clientFd].beforeBodyMsgLen)
+            {
+                responseStatus[m_clientFd].status = HANDLE_BODY;    // 设置为正在处理消息体的的状态
+                responseStatus[m_clientFd].curStatusHasSendLen = 0; // 设置当前已发送的数据长度为0
+                std::cout << outHead("info") << "客户端" << m_clientFd << " 响应消息的状态行和消息首部发送完成，正在发送消息体..." << std::endl;
+            }
+            // 如果发送的是文件，输出提示信息
+            if (responseStatus[m_clientFd].bodyType == FILE_TYPE)
+            {
+                std::cout << outHead("info") << "客户端" << m_clientFd << " 请求的是文件，开始发送文件" << responseStatus[m_clientFd].bodyFileName << "..." << std::endl;
+            }
+        }
+
+        //
     }
 }
