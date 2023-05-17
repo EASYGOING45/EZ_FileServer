@@ -264,7 +264,7 @@ void HandleRecv::process()
                                         }
 
                                         // 如果后面不是结束标识，先将\r 之前的所有数据写入文件，在循环的下一轮会进到上一个if，结束整个处理过程
-                                        saveLen = endIndex
+                                        saveLen = endIndex;
                                     }
                                     else
                                     {
@@ -338,5 +338,51 @@ void HandleRecv::process()
         shutdown(m_clientFd, SHUT_RDWR);
         close(m_clientFd);
         requestStatus.erase(m_clientFd);
+    }
+}
+
+void HandleSend::process()
+{
+    std::cout << outHead("info") << "开始处理客户端" << m_clientFd << " 的一个HandleSend事件" << std::endl;
+    // 如果该套接字没有需要处理的Response消息，直接退出
+    if (responseStatus.find(m_clientFd) == responseStatus.end())
+    {
+        std::cout << outHead("info") << "客户端" << m_clientFd << " 没有要处理的响应消息" << std::endl;
+        return;
+    }
+
+    // 根据Response对象的状态执行特定的处理
+
+    // 如果处于初始状态，根据请求的文件构建不同类型发送数据
+    if (responseStatus[m_clientFd].status == HANDLE_INIT)
+    {
+        // 首先分离操作方法和文件
+        std::string opera, filename;
+        if (responseStatus[m_clientFd].bodyFileName == "/")
+        {
+            // 如果是访问根目录，下面会直接返回文件列表
+            opera = "/";
+        }
+        else
+        {
+            // 如果不是访问根目录，根据 / 对URL中的路径（如/delete/filename）进行分隔，找到要执行的操作和操作的文件
+
+            // 文件名的查找中间 / 的索引
+            int i = 1;
+            while (i < responseStatus[m_clientFd].bodyFileName.size() && responseStatus[m_clientFd].bodyFileName[i] != '/')
+            {
+                ++i;
+            }
+            // 检查是否包含操作和对应的文件名，如果不满足 操作+文件名的格式，则设置为重定向操作，将页面重定向到文件列表页面
+            if (i < responseStatus[m_clientFd].bodyFileName.size() - 1)
+            {
+                opera = responseStatus[m_clientFd].bodyFileName.substr(1, i - 1);
+                filename = responseStatus[m_clientFd].bodyFileName.substr(i + 1);
+            }
+            else
+            {
+                opera = "redirect";
+            }
+        }
     }
 }
