@@ -384,5 +384,32 @@ void HandleSend::process()
                 opera = "redirect";
             }
         }
+
+        // 初始状态中，根据资源操作确定所发送数据的内容
+        if (opera == "/")
+        {
+            // 如果是根目录，返回文件夹中的所有文件名字
+            // 添加状态行
+            responseStatus[m_clientFd].beforeBodyMsg = getStatusLine("HTTP/1.1", "200", "OK");
+
+            // 先创建响应体对应的数据
+            // 函数中先获取 /filedir 文件夹中的所有文件，然后根据 filelist.html的页面结构，所有文件项加入页面，最终的HTML页面以字符串形式保存到msgBody中
+            getFileListPage(responseStatus[m_clientFd].msgBody);
+            // 记录页面的字节个数，也就是消息体长度
+            responseStatus[m_clientFd].msgBodyLen = responseStatus[m_clientFd].msgBody.size();
+
+            // 根据消息体的数据长度添加头部信息
+            responseStatus[m_clientFd].beforeBodyMsg += getMessageHeader(std::to_string(responseStatus[m_clientFd].msgBodyLen), "html");
+            // 加入空行
+            responseStatus[m_clientFd].beforeBodyMsg += "\r\n";
+
+            responseStatus[m_clientFd].beforeBodyMsgLen = responseStatus[m_clientFd].beforeBodyMsg.size();
+
+            // 设置标识，转换到发送数据的状态
+            responseStatus[m_clientFd].bodyType = HTML_TYPE;    // 设置消息体的类型
+            responseStatus[m_clientFd].status = HANDLE_HEAD;    // 设置状态为等待发送消息头
+            responseStatus[m_clientFd].curStatusHasSendLen = 0; // 设置当前已发送的数据长度为0
+            std::cout << outHead("info") << "客户端" << m_clientFd << " 的响应消息用来返回文件列表页面，状态行和消息体已构建完成" << std::endl;
+        }
     }
 }
