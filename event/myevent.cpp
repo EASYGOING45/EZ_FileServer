@@ -431,31 +431,57 @@ void HandleSend::process()
                 modifyWaitFd(m_epollFd, m_clientFd, true, true, true); // 重置写事件
                 return;
             }
-            // FLAG 2023-05-17-11:24
-            else if (opera == "delete")
+            else
             {
-                // 删除文件相关操作
-                // 在本地删除文件
-                int ret = remove(("filedir/" + filename).c_str());
-                if (ret != 0)
-                {
-                    std::cout << outHead("error") << "客户端" << m_clientFd << " 的请求消息要删除文件" << filename << "但是文件删除失败" << std::endl;
-                }
-                else
-                {
-                    std::cout << outHead("info") << "客户端" << m_clientFd << " 的请求消息要删除文件" << filename << "文件删除成功" << std::endl;
-                }
+                // 文件打开成功时才构建响应体
+                // 获取文件信息
+                struct stat fileStat;
+                fstat(responseStatus[m_clientFd].fileMsgFd, &fileStat); //
 
-                // 不管文件删除成功还是失败，动都重定向到文件列表页面
-                responseStatus[m_clientFd] = Response();               // 重置Response
-                responseStatus[m_clientFd].bodyFileName = "/redirect"; // 设置为重定向报文
+                // 获取文件长度，作为消息体长度
+                responseStatus[m_clientFd].msgBodyLen = fileStat.st_size;
 
-                std::cout << outHead("info") << "客户端" << m_clientFd << " 的请求消息处理完成，发送重定向报文" << std::endl;
+                // 根据消息体构建消息首部
+                responseStatus[m_clientFd].beforeBodyMsg += getMessageHeader(std::to_string(responseStatus[m_clientFd].msgBodyLen), "file", std::to_string(responseStatus[m_clientFd].msgBodyLen - 1));
+                // 加入空行
+                responseStatus[m_clientFd].beforeBodyMsg += "\r\n";
+                responseStatus[m_clientFd].beforeBodyMsgLen = responseStatus[m_clientFd].beforeBodyMsg.size();
 
-                // 重置EPOLLONEHOT事件，用于发送重定向报文,之后直接退出函数
-                modifyWaitFd(m_epollFd, m_clientFd, true, true, true);
-                return;
+                // 设置标识，转换到发送数据的状态
+                responseStatus[m_clientFd].bodyType = FILE_TYPE;    // 设置消息体的类型
+                responseStatus[m_clientFd].status = HANDLE_HEAD;    // 设置状态为处理消息头
+                responseStatus[m_clientFd].curStatusHasSendLen = 0; // 设置当前已发送的数据长度为0
+
+                std::cout << outHead("info") << " 客户端" << m_clientFd << " 的请求消息要下载文件" << filename << " ，文件打开成功，根据文件构建响应消息状态行和头部信息成功" << std::endl;
             }
         }
+        // FLAG 2023-05-17-11:24
+        else if (opera == "delete")
+        {
+            // 删除文件相关操作
+            // 在本地删除文件
+            int ret = remove(("filedir/" + filename).c_str());
+            if (ret != 0)
+            {
+                std::cout << outHead("error") << "客户端" << m_clientFd << " 的请求消息要删除文件" << filename << "但是文件删除失败" << std::endl;
+            }
+            else
+            {
+                std::cout << outHead("info") << "客户端" << m_clientFd << " 的请求消息要删除文件" << filename << "文件删除成功" << std::endl;
+            }
+
+            // 不管文件删除成功还是失败，动都重定向到文件列表页面
+            responseStatus[m_clientFd] = Response();               // 重置Response
+            responseStatus[m_clientFd].bodyFileName = "/redirect"; // 设置为重定向报文
+
+            std::cout << outHead("info") << "客户端" << m_clientFd << " 的请求消息处理完成，发送重定向报文" << std::endl;
+
+            // 重置EPOLLONEHOT事件，用于发送重定向报文,之后直接退出函数
+            modifyWaitFd(m_epollFd, m_clientFd, true, true, true);
+            return;
+        }
+        else
+        {
+                }
     }
 }
