@@ -432,6 +432,30 @@ void HandleSend::process()
                 return;
             }
             // FLAG 2023-05-17-11:24
+            else if (opera == "delete")
+            {
+                // 删除文件相关操作
+                // 在本地删除文件
+                int ret = remove(("filedir/" + filename).c_str());
+                if (ret != 0)
+                {
+                    std::cout << outHead("error") << "客户端" << m_clientFd << " 的请求消息要删除文件" << filename << "但是文件删除失败" << std::endl;
+                }
+                else
+                {
+                    std::cout << outHead("info") << "客户端" << m_clientFd << " 的请求消息要删除文件" << filename << "文件删除成功" << std::endl;
+                }
+
+                // 不管文件删除成功还是失败，动都重定向到文件列表页面
+                responseStatus[m_clientFd] = Response();               // 重置Response
+                responseStatus[m_clientFd].bodyFileName = "/redirect"; // 设置为重定向报文
+
+                std::cout << outHead("info") << "客户端" << m_clientFd << " 的请求消息处理完成，发送重定向报文" << std::endl;
+
+                // 重置EPOLLONEHOT事件，用于发送重定向报文,之后直接退出函数
+                modifyWaitFd(m_epollFd, m_clientFd, true, true, true);
+                return;
+            }
         }
     }
 }
