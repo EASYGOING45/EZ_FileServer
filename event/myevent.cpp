@@ -411,5 +411,27 @@ void HandleSend::process()
             responseStatus[m_clientFd].curStatusHasSendLen = 0; // 设置当前已发送的数据长度为0
             std::cout << outHead("info") << "客户端" << m_clientFd << " 的响应消息用来返回文件列表页面，状态行和消息体已构建完成" << std::endl;
         }
+        else if (opera == "download")
+        {
+            // 下载文件
+            // 构建下载文件的响应，向用户发送文件
+
+            // 添加状态行 HTTP/1.1 200 OK
+            responseStatus[m_clientFd].beforeBodyMsg = getStatusLine("HTTP/1.1", "200", "OK");
+
+            // 先创建响应体对应的数据
+            // 获取所传递文件的描述符
+            responseStatus[m_clientFd].fileMsgFd = open(("filedir/" + filename).c_str(), O_RDONLY); // O_RDONLY
+            if (responseStatus[m_clientFd].fileMsgFd == -1)
+            {
+                // 文件打开失败时，退出当前函数（避免下面关闭文件造成错误），并重置写事件，在下次进入时回复重定向报文
+                std::cout << outHead("error") << "客户端" << m_clientFd << " 的请求消息要下载文件" << filename << " , 但是文件打开失败，退出当前函数，重新进入用于返回重定向报文，重定向到文件列表" << std::endl;
+                responseStatus[m_clientFd] = Response(); // 重置Response
+                responseStatus[m_clientFd].bodyFileName = "/redirect";
+                modifyWaitFd(m_epollFd, m_clientFd, true, true, true); // 重置写事件
+                return;
+            }
+            // FLAG 2023-05-17-11:24
+        }
     }
 }
