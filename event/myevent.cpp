@@ -674,3 +674,43 @@ std::string HandleSend::getStatusLine(const std::string &httpVersion, const std:
     statusLine += statusDes + "\r\n"; // 注意这里是\r\n，不是\n
     return statusLine;
 }
+
+// 以下两个函数用来构建文件列表的页面，最终结果保存到 fileListHtml中
+void HandleSend::getFileListPage(std::string &fileListHtml)
+{
+    // 结果保存到fileListHtml
+
+    // 将指定目录内的所有文件保存到fileVec中
+    std::vector<std::string> fileVec;
+    getFileVec("filedir", fileVec);
+
+    // 构建页面
+    std::ifstream fileListStream("html/filelist.html", std::ios::in);
+    std::string tempLine;
+    // 首先读取文件列表的<!--filelist_label-->注释前的语句
+    while (1)
+    {
+        getline(fileListStream, tempLine);
+        if (tempLine == "<!--filelist_label-->")
+        {
+            break;
+        }
+        fileListHtml += tempLine + "\n";
+    }
+
+    // 根据如下标签，将文件夹中的所有文件项添加到返回页面中
+    //   <tr><td class="col1">filenamename</td> <td class="col2"><a href="file/filename">下载</a></td> <td class="col3"><a href="delete/filename">删除</a></td></tr>
+    for (const auto &filename : fileVec)
+    {
+        fileListHtml += "            <tr><td class=\"col1\">" + filename +
+                        "</td> <td class=\"col2\"><a href=\"download/" + filename +
+                        "\">下载</a></td> <td class=\"col3\"><a href=\"delete/" + filename +
+                        "\" onclick=\"return confirmDelete();\">删除</a></td></tr>" + "\n";
+    }
+
+    // 将文件列表注释后的语句加入后面
+    while (getline(fileListStream, tempLine))
+    {
+        fileListHtml += tempLine + "\n";
+    }
+}
