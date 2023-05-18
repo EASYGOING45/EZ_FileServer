@@ -580,7 +580,31 @@ void HandleSend::process()
                 // 获取已经发送的字节数，用于控制如下函数从哪里开始发送
                 sentLen = responseStatus[m_clientFd].curStatusHasSendLen;
 
-                // 使用 sendfile函数
+                // 使用 sendfile函数,实现零拷贝的发送数据，提高效率
+                sentLen = sendfile(m_clientFd, responseStatus[m_clientFd].fileMsgFd, (off_t *)&sentLen, responseStatus[m_clientFd].msgBodyLen - sentLen);
+                if (sentLen == -1)
+                {
+                    if (errno != EAGAIN)
+                    {
+                        // 如果不是缓冲区满，设置发送失败状态
+                        requestStatus[m_clientFd].status = HANDLE_ERROR;
+                        std::cout << outHead("error") << "发送文件时返回-1(errno = " << errno << ")" << std::endl;
+                        break;
+                    }
+                }
+
+                // 累加已发送的数据长度
+                responseStatus[m_clientFd].curStatusHasSendLen += sentLen;
+
+                // 文件发送完成后，重置Response为访问根目录的响应，向客户端传递文件列表
+                if (responseStatus[m_clientFd].curStatusHasSendLen >= responseStatus[m_clientFd].msgBodyLen)
+                {
+                    responseStatus[m_clientFd].status = HANDLE_COMPLATE; // 设置为事件处理完成
+                    responseStatus[m_clientFd].curStatusHasSendLen = 0;  // 设置已经发送的数据长度为0
+
+                    std::cout << outHead("info") << "客户端" << m_clientFd << "请求的文件发送完成" << std::endl;
+                    break;
+                }
             }
         }
     }
