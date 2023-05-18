@@ -658,3 +658,19 @@ void HandleSend::process()
         close(responseStatus[m_clientFd].fileMsgFd);
     }
 }
+
+// 用于构建状态行，参数分别表示状态行的三个部分
+std::string HandleSend::getStatusLine(const std::string &httpVersion, const std::string &statusCode, const std::string &statusDes)
+{
+    std::string statusLine;
+    // 记录状态行相关的参数
+    responseStatus[m_clientFd].responseHttpVersion = httpVersion;
+    responseStatus[m_clientFd].responseStatusCode = statusCode;
+    responseStatus[m_clientFd].responseStatusDes = statusDes;
+
+    // 构建状态行
+    statusLine = httpVersion + " ";
+    statusLine += statusCode + " ";
+    statusLine += statusDes + "\r\n"; // 注意这里是\r\n，不是\n
+    return statusLine;
+}
