@@ -606,6 +606,55 @@ void HandleSend::process()
                     break;
                 }
             }
+            else if (responseStatus[m_clientFd].bodyType == EMPTY_TYPE)
+            {
+                // FLAG-3
+                // 消息体为空时便直接进入下个状态，目前用于重定向报文的消息体发送
+                responseStatus[m_clientFd].status = HANDLE_COMPLATE; // 设置为事件处理完成
+                responseStatus[m_clientFd].curStatusHasSendLen = 0;  // 设置已经发送的数据长度为0
+                std::cout << outHead("info") << "客户端" << m_clientFd << " 的重定向报文发送成功" << std::endl;
+                break;
+            }
         }
+
+        if (responseStatus[m_clientFd].status == HANDLE_ERROR)
+        {
+            // 如果是出错状态，退出while事件处理
+            break;
+        }
+    }
+
+    // 判断发送最终状态执行特定的操作
+    if (responseStatus[m_clientFd].status == HANDLE_COMPLATE)
+    {
+        // 完成发送数据后删除该响应
+        responseStatus.erase(m_clientFd);
+        modifyWaitFd(m_epollFd, m_clientFd, true, true, false); // 不再监听写事件
+        std::cout << outHead("info") << "客户端" << m_clientFd << " 的响应报文发送成功" << std::endl;
+    }
+    else if (responseStatus[m_clientFd].status == HANDLE_ERROR)
+    {
+        // 如果发送失败，删除该响应，删除监听该文件描述符，关闭连接
+        responseStatus.erase(m_clientFd);
+        // 不再监听写事件
+        modifyWaitFd(m_epollFd, m_clientFd, true, false, false);
+        // 关闭文件描述符
+        shutdown(m_clientFd, SHUT_WR);
+        close(m_clientFd);
+        std::cout << outHead("error") << "客户端" << m_clientFd << " 的响应报文发送失败，关闭相关的文件描述符" << std::endl;
+    }
+    else
+    {
+        // 如果不是完成了数据传输或出错，应该充值EPOLLSHOT事件，以保证写事件可以继续产生，继续传输数据
+        modifyWaitFd(m_epollFd, m_clientFd, true, true, true);
+
+        // 退出函数，当执行失败时或数据传输完成时才需要关闭文件
+        return;
+    }
+
+    // 处理成功或非文件打开失败时需要关闭文件
+    if (responseStatus[m_clientFd].bodyType == FILE_TYPE)
+    {
+        close(responseStatus[m_clientFd].fileMsgFd);
     }
 }
