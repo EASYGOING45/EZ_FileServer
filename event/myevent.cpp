@@ -714,3 +714,70 @@ void HandleSend::getFileListPage(std::string &fileListHtml)
         fileListHtml += tempLine + "\n";
     }
 }
+
+void HandleSend::getFileVec(const std::string dirName, std::vector<std::string> &resVec)
+{
+    // 使用dirent获取文件目录下的所有文件
+    DIR *dir; // 目录指针
+    dir = opendir(dirName.c_str());
+    struct dirent *stdinfo;
+    while (1)
+    {
+        // 获取文件夹中的一个文件
+        stdinfo = readdir(dir);
+        if (stdinfo == nullptr)
+        {
+            break;
+        }
+        resVec.push_back(stdinfo->d_name);
+        if (resVec.back() == "." || resVec.back() == "..")
+        {
+            resVec.pop_back();
+        }
+    }
+}
+
+// 构建头部字段：
+// contentLength        : 指定消息体的长度
+// contentType          : 指定消息体的类型
+// redirectLoction = "" : 如果是重定向报文，可以指定重定向的地址。空字符串表示不添加该首部。
+// contentRange = ""    : 如果是下载文件的响应报文，指定当前发送的文件范围。空字符串表示不添加该首部。
+std::string HandleSend::getMessageHeader(const std::string contentLength, const std::string contentType, const std::string redirectLoction, const std::string contentRange)
+{
+    std::string headerOpt;
+
+    // 添加消息体长度字段
+    if (contentLength != "")
+    {
+        headerOpt += "Content-Length: " + contentLength + "\r\n";
+    }
+
+    // 添加消息体类型字段
+    if (contentType != "")
+    {
+        if (contentType == "html")
+        {
+            headerOpt += "Content-Type: text/html;charset=UTF-8\r\n"; // 发送网页时指定的类型
+        }
+        else if (contentType == "file")
+        {
+            headerOpt += "Content-Type: application/octet-stream\r\n"; // 发送文件时指定的类型
+        }
+    }
+
+    // 添加重定向位置字段
+    if (redirectLoction != "")
+    {
+        headerOpt += "Location: " + redirectLoction + "\r\n";
+    }
+
+    // 添加文件范围的字段
+    if (contentRange != "")
+    {
+        headerOpt += "Content-Range: 0-" + contentRange + "\r\n";
+    }
+
+    headerOpt += "connection: keep-alive\r\n";
+
+    return headerOpt;
+}
