@@ -538,6 +538,50 @@ void HandleSend::process()
             }
         }
 
-        //
+        // 发送响应消息体
+        if (responseStatus[m_clientFd].status == HANDLE_BODY)
+        {
+            // 根据发送数据的类型执行特定的发送操作
+            if (responseStatus[m_clientFd].bodyType == HTML_TYPE)
+            {
+                // FLAG-2
+                // 根据发送数据的类型执行特定的发送操作
+                // 消息体为 HTML 页面时的发送方法
+                sentLen = responseStatus[m_clientFd].curStatusHasSendLen;
+                sentLen = send(m_clientFd, responseStatus[m_clientFd].msgBody.c_str() + sentLen, responseStatus[m_clientFd].msgBodyLen - sentLen, 0);
+                if (sentLen == -1)
+                {
+                    if (errno != EAGAIN)
+                    {
+                        // 如果不是缓冲区满，设置发送失败状态，并退出循环
+                        requestStatus[m_clientFd].status = HANDLE_ERROR;
+                        std::cout << outHead("error") << "发送 HTML 消息体时返回 -1 (errno = " << errno << ")" << std::endl;
+                        break;
+                    }
+
+                    // 如果缓冲区已满，退出循环，下面会重置 EPOLLOUT 事件，等待下次进入函数继续发送
+                    break;
+                }
+                responseStatus[m_clientFd].curStatusHasSendLen += sentLen;
+
+                // 如果数据已经发送完成，则将状态设置为发送消息体
+                if (responseStatus[m_clientFd].curStatusHasSendLen >= responseStatus[m_clientFd].msgBodyLen)
+                {
+                    responseStatus[m_clientFd].status = HANDLE_COMPLATE; // 设置为正在处理消息体的状态
+                    responseStatus[m_clientFd].curStatusHasSendLen = 0;  // 设置当前已发送的数据长度为0
+                    std::cout << outHead("info") << "客户端" << m_clientFd << " 请求的是HTML文件，文件发送成功" << std::endl;
+                    break;
+                }
+            }
+            else if (responseStatus[m_clientFd].bodyType == FILE_TYPE)
+            {
+                // 消息体时文件时的发送方法处理
+
+                // 获取已经发送的字节数，用于控制如下函数从哪里开始发送
+                sentLen = responseStatus[m_clientFd].curStatusHasSendLen;
+
+                // 使用 sendfile函数
+            }
+        }
     }
 }
