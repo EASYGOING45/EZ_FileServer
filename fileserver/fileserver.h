@@ -49,6 +49,6 @@ private:
 
     epoll_event resEvents[MAX_RESEVENT_SIZE]; // 保存 epoll_wait 结果的数组
 
-    ThreadPool *ThreadPool;
+    ThreadPool *threadPool;
 };
 #endif
