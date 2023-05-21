@@ -259,7 +259,7 @@ int WebServer::waitEpoll()
             }
 
             // 将事件加入线程池的待处理队列中。在线程池中，事件执行完后销毁事件，可以修改为智能指针自动释放
-            ThreadPool->appendEvent(event, eventType);
+            threadPool->appendEvent(event, eventType);
 
             // 将event置空
             event = nullptr;
