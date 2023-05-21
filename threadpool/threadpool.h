@@ -14,6 +14,7 @@
 
 #include "../event/myevent.h"
 
+static int tnum = 0;
 class ThreadPool
 {
 public:
