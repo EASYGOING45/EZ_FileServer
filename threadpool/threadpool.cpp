@@ -48,3 +48,88 @@ ThreadPool::~ThreadPool()
     // 释放动态创建的保存线程id的数组
     delete[] m_threads;
 }
+
+int ThreadPool::appendEvent(EventBase *event, const std::string eventType)
+{
+    int ret = 0;
+    // 事件队列加锁
+    ret = pthread_mutex_lock(&queueLocker);
+    if (ret != 0)
+    {
+        std::cout << outHead("error") << "事件队列加锁失败" << std::endl;
+        return -1;
+    }
+    // 向队列中添加事件
+    m_workQueue.push(event);
+    std::cout << outHead("info") << eventType << "添加成功，线程池事件队列中剩余的事件个数：" << m_workQueue.size() << std::endl;
+    // 事件队列解锁
+    pthread_mutex_unlock(&queueLocker);
+    if (ret != 0)
+    {
+        std::cout << outHead("error") << "事件队列解锁失败" << std::endl;
+        return -2;
+    }
+    // 事件队列的信号量+1
+    sem_post(&queueEventNum);
+    if (ret != 0)
+    {
+        std::cout << outHead("error") << "事件队列信号量post失败" << std::endl;
+        return -3;
+    }
+    return 0;
+}
+
+// worker
+void *ThreadPool::worker(void *arg)
+{
+    ThreadPool *thiz = static_cast<ThreadPool *>(arg);
+    thiz->run(); // 在线程中执行该函数等待处理事件队列中的事件
+    return thiz;
+}
+
+// run
+void ThreadPool::run()
+{
+    int threadN = tnum;
+    std::cout << outHead("info") << "线程" << threadN << "正在执行" << std::endl;
+    while (1)
+    {
+        // 等待事件队列中有新的事件
+        int ret = sem_wait(&queueEventNum);
+        if (ret != 0)
+        {
+            std::cout << outHead("error") << "等待队列事件失败" << std::endl;
+            return;
+        }
+        std::cout << outHead("log") << "线程" << threadN << "收到事件" << std::endl;
+        // 互斥访问队列
+        ret = pthread_mutex_lock(&queueLocker);
+        if (ret != 0)
+        {
+            std::cout << outHead("error") << "ThreadPool:run():事件队列加锁失败" << std::endl;
+            return;
+        }
+        // 获取最前面的事件
+        EventBase *curEvent = m_workQueue.front();
+        m_workQueue.pop();
+
+        // 解锁访问队列
+        ret = pthread_mutex_unlock(&queueLocker);
+        if (ret != 0)
+        {
+            std::cout << outHead("error") << "ThreadPool:run():事件队列解锁失败" << std::endl;
+            return;
+        }
+
+        if (curEvent == nullptr)
+        {
+            continue;
+        }
+
+        std::cout << outHead("info") << "线程" << threadN << "开始处理时间" << std::endl;
+        curEvent->process();
+        std::cout << outHead("info") << "线程" << threadN << "处理事件完成" << std::endl;
+        // 事件执行完需要销毁
+        delete curEvent;
+    }
+}
